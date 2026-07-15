@@ -39,7 +39,7 @@ corretamente. Abrir o breaker aí seria tirar do ar quem está funcionando.
 **503 só depois do last known good falhar** ([ADR 0003](0003-last-known-good-sem-redis.md)).
 
 A classificação acontece **dentro de cada provider**
-([ADR 0001](0001-abstracao-de-providers.md)) — é lá que o `200 + {"erro": true}` da
+([ADR 0001](0001-abstracao-de-providers.md)) — é lá que o `200 + {"erro": "true"}` da
 ViaCEP e o `404` da BrasilAPI viram o mesmo `CepNotFoundError`. Por isso o `catch` do
 serviço não conhece status HTTP.
 

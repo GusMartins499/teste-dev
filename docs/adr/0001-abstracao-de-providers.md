@@ -9,17 +9,29 @@
 O serviço consulta duas APIs externas (ViaCEP e BrasilAPI) que divergem em tudo que
 importa:
 
+Formatos confirmados chamando as duas APIs em 2026-07-15, não de memória:
+
 | | ViaCEP | BrasilAPI |
 |---|---|---|
 | Logradouro | `logradouro` | `street` |
 | Bairro | `bairro` | `neighborhood` |
 | Cidade | `localidade` | `city` |
 | UF | `uf` | `state` |
-| CEP inexistente | **HTTP 200** + `{"erro": true}` | HTTP 404 |
-| CEP malformado | HTTP 400 | HTTP 400 |
+| Complemento | `complemento` | **não expõe** |
+| CEP devolvido | `"01310-100"` (com máscara) | `"01310100"` |
+| CEP inexistente | **HTTP 200** + `{"erro": "true"}` (string, não booleano) | HTTP 404 |
+| CEP malformado | HTTP 400 + corpo **HTML** | HTTP 400 + JSON |
 
 Repare na linha mais importante: a ViaCEP **mente no status HTTP** para CEP
 inexistente. Os dois providers codificam "não existe" de formas incompatíveis.
+
+Duas armadilhas que só apareceram ao chamar as APIs de verdade:
+
+- O `erro` da ViaCEP é a **string** `"true"`, não o booleano `true`. Um
+  `if (payload.erro === true)` passaria no code review e falharia em produção.
+- O 400 da ViaCEP vem com corpo **HTML**. Ler `.json()` antes de checar o status
+  estoura o parser, e o erro que sobe é de parsing — não o 400 real, que é o
+  diagnóstico útil.
 
 O README pergunta explicitamente: *"Se amanhã adicionarmos uma terceira API, o que
 muda no código?"*. Existe uma resposta certa — *uma classe nova e um registro* — e
@@ -42,7 +54,7 @@ O `name` faz três trabalhos com uma string só: chave do circuit breaker
 
 **Camada anticorrupção dentro de cada provider.** Cada implementação traduz o
 contrato *dela* e os erros *dela* para o vocabulário do domínio antes de deixar
-qualquer coisa vazar. `ViaCepProvider` converte `200 + {"erro": true}` em
+qualquer coisa vazar. `ViaCepProvider` converte `200 + {"erro": "true"}` em
 `CepNotFoundError`; `BrasilApiProvider` converte `404` no **mesmo**
 `CepNotFoundError`. Os dois mentem de formas diferentes lá dentro e saem falando a
 mesma língua aqui fora.
@@ -103,7 +115,7 @@ com um chamador só, adivinhando o que o segundo vai precisar.
   controller, DTO e filtro: zero alteração. O breaker novo nasce sozinho porque a
   chave é o `name`.
 - O serviço não conhece status HTTP. Testável sem mock de rede.
-- Cada tradução ganha teste unitário isolado — e o `200 + {"erro": true}` da ViaCEP
+- Cada tradução ganha teste unitário isolado — e o `200 + {"erro": "true"}` da ViaCEP
   é exatamente o tipo de coisa que quebra calada.
 
 **Custos:**
