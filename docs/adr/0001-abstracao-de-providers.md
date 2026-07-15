@@ -7,9 +7,7 @@
 ## Contexto
 
 O serviço consulta duas APIs externas (ViaCEP e BrasilAPI) que divergem em tudo que
-importa:
-
-Formatos confirmados chamando as duas APIs em 2026-07-15, não de memória:
+importa. Formatos confirmados chamando as duas em 2026-07-15, não de memória:
 
 | | ViaCEP | BrasilAPI |
 |---|---|---|
