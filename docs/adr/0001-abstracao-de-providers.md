@@ -77,8 +77,24 @@ concentra no orquestrador o conhecimento de que a ViaCEP responde 200 em erro. O
 — código confuso no lugar mais caro do sistema. Normalizar na borda mantém o serviço
 legível.
 
-**Herança de uma `BaseCepProvider` abstrata.** Rejeitada: os dois providers não
-compartilham nada além da assinatura. Base class aqui seria acoplamento sem reuso.
+**Herança de uma `BaseCepProvider` abstrata.** Rejeitada — mas não pelo motivo que
+esta ADR alegava originalmente. A versão anterior dizia que "os dois providers não
+compartilham nada além da assinatura", e isso é **falso**: eles compartilham o `fetch`,
+o `AbortSignal.timeout` e a tradução de `TimeoutError`/`TypeError` para
+`ProviderTimeoutError`/`ProviderUnavailableError`.
+
+O que **não** se compartilha é a classificação de status, e é justamente onde uma base
+class enganaria: na ViaCEP um 4xx significa que *nós* montamos a URL errado (o DTO já
+validou o formato), enquanto na BrasilAPI o **404 é resposta legítima** e vira
+`CepNotFoundError`. Herdar essa parte produziria o bug mais caro possível — "não
+existe" tratado como falha de provider, disparando fallback e punindo no breaker quem
+respondeu certo.
+
+A rejeição continua de pé porque o compartilhamento real é **comportamento sem
+estado**: uma função (`fetch` + timeout + tradução de erro de rede) serve melhor que
+herança, não arrasta `this` nem ciclo de vida do Nest, e se testa sozinha. A extração
+acontece quando o segundo provider existir — extrair antes seria desenhar a abstração
+com um chamador só, adivinhando o que o segundo vai precisar.
 
 ## Consequências
 

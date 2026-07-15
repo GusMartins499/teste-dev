@@ -47,8 +47,37 @@ Com isso o Jaeger responde sozinho perguntas como *"por que o P99 subiu ontem à
 
 **pino para log estruturado em JSON, com `trace_id` embutido.** Log e trace se
 cruzam: do trace no Jaeger você chega na linha de log, e vice-versa. Não usamos o
-`Logger` do Nest — ele é conveniente para desenvolvimento, mas o alvo aqui é
-correlação, e isso exige o `trace_id` em todo evento.
+`Logger` do Nest, por dois motivos independentes.
+
+**Estrutura.** O alvo é correlação, e isso exige `trace_id` em todo evento. A mesma
+linha nos dois:
+
+```
+Nest:  ^[[32m[Nest] 1249403  - ^[[39m07/15/2026, 12:41:12 PM ^[[32m    LOG^[[39m ...
+pino:  {"level":30,"time":1784130072847,"pid":1249403,"msg":"request 0 completed"}
+```
+
+O `Logger` do Nest ainda escreve **código ANSI de cor mesmo sem TTY** — medido: 20.000
+linhas com escape em arquivo. Isso suja log file e confunde coletor.
+
+**Bloqueio do event loop.** Medido em 2026-07-15 (Node 24.3.0, Nest 11.1.28,
+pino 10.3.1), sondando se o dado já está no arquivo logo após a chamada:
+
+| destino do `stdout` | `Logger` do Nest | `pino()` |
+|---|---|---|
+| **Arquivo** (`> app.log`, pm2, systemd) | **síncrono — bloqueia** | assíncrono |
+| **TTY** (dev) | **síncrono — bloqueia** | assíncrono |
+| **Pipe** (Docker, coletor) | assíncrono, enfileira em RAM | assíncrono |
+
+O `Logger` do Nest escreve pelo `process.stdout`, que é síncrono para arquivo e TTY
+([doc do Node](https://nodejs.org/api/process.html#a-note-on-process-io)). O pino
+escreve no fd 1 via `sonic-boom`, cujo default é `sync: false` — ele **não** bloqueia
+em nenhum destino.
+
+Em Docker com pipe os dois são assíncronos e a diferença cai para CPU (~1,5x, algo
+como 0,8% contra 0,15% a 1.000 logs/s — irrelevante na nossa carga). Mas em qualquer
+deploy que redirecione `stdout` para arquivo, em disco lento ou FS de rede, o `Logger`
+do Nest para o event loop pelo tempo do `write` e o pino não.
 
 **Array `attempts` acumulado no serviço**, emitido em um evento quando a cadeia
 inteira falha: quem foi tentado, em que ordem, quanto cada um demorou, e por que cada
@@ -60,8 +89,14 @@ reclamar, em vez de "deu erro lá pelas 3 da tarde".
 
 ## Alternativas consideradas
 
-**`Logger` do Nest.** Rejeitada: sem correlação e sem estrutura. Responde "deu erro",
-não "o que aconteceu".
+**`Logger` do Nest.** Rejeitada: sem correlação, sem estrutura e bloqueia o event loop
+quando o `stdout` é arquivo ou TTY. Responde "deu erro", não "o que aconteceu".
+
+**`pino.transport()` (worker thread) em vez de `pino()` puro.** Rejeitada por escopo.
+Medido: 1,6 µs/msg contra 4,2 µs do `pino()` e 7,6 µs do `Logger` do Nest. O ganho é
+real, mas vem de tirar a serialização da thread principal — e o `pino()` puro já não
+bloqueia, que era o problema. Custaria uma worker thread e o caveat de perder as
+últimas linhas em caso de crash, para economizar CPU que não nos falta.
 
 **Só logs (pino → Loki → Grafana).** Considerada seriamente e rejeitada — é uma stack
 boa, mas para *este* problema você perde o melhor ativo do projeto. A relação temporal
