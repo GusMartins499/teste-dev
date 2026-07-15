@@ -71,11 +71,11 @@ function isProviderFault(status: number): boolean {
 }
 
 function networkDetail(error: unknown): string {
-  const code = (error as { cause?: { code?: string } }).cause?.code;
-  if (code) {
-    return code;
+  if (!(error instanceof Error)) {
+    return 'unknown';
   }
-  return error instanceof Error ? error.name : 'unknown';
+  const code = (error.cause as { code?: string } | undefined)?.code;
+  return code ?? error.name;
 }
 
 function onlyDigits(cep: string): string {

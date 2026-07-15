@@ -21,20 +21,21 @@ const FOUND_PAYLOAD = {
   siafi: '7107',
 };
 
-function mockFetch(body: unknown, status = 200): jest.Mock {
-  const fetchMock = jest.fn().mockResolvedValue({
+type FetchSpy = jest.SpyInstance<
+  ReturnType<typeof fetch>,
+  Parameters<typeof fetch>
+>;
+
+function mockFetch(body: unknown, status = 200): FetchSpy {
+  return jest.spyOn(global, 'fetch').mockResolvedValue({
     ok: status >= 200 && status < 300,
     status,
     json: async () => await Promise.resolve(body),
-  });
-  global.fetch = fetchMock;
-  return fetchMock;
+  } as Response);
 }
 
-function mockFetchRejecting(error: unknown): jest.Mock {
-  const fetchMock = jest.fn().mockRejectedValue(error);
-  global.fetch = fetchMock;
-  return fetchMock;
+function mockFetchRejecting(error: unknown): FetchSpy {
+  return jest.spyOn(global, 'fetch').mockRejectedValue(error);
 }
 
 function timeoutError(): Error {
@@ -147,18 +148,28 @@ describe('ViaCepProvider', () => {
     });
 
     it('never parses the body of a 5xx, because ViaCEP answers errors with HTML', async () => {
-      const fetchMock = mockFetch(null, 503);
-      fetchMock.mockResolvedValue({
+      mockFetch(null, 503).mockResolvedValue({
         ok: false,
         status: 503,
         json: async () =>
           await Promise.reject(new Error('should not be called')),
-      });
+      } as unknown as Response);
 
       await expect(provider.lookup('01310100')).rejects.toBeInstanceOf(
         ProviderUnavailableError,
       );
     });
+
+    it.each([null, undefined, 'a bare string', 42])(
+      'survives a thrown %p without crashing the error path itself',
+      async (thrown) => {
+        mockFetchRejecting(thrown);
+
+        await expect(provider.lookup('01310100')).rejects.toBeInstanceOf(
+          ProviderUnavailableError,
+        );
+      },
+    );
   });
 
   describe('when we are at fault', () => {

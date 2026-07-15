@@ -10,7 +10,12 @@ import { ViaCepProvider } from './providers/viacep.provider';
     ViaCepProvider,
     {
       provide: CEP_PROVIDERS,
-      useFactory: (...providers: CepProvider[]) => providers,
+      useFactory: (...providers: CepProvider[]) => {
+        if (providers.length === 0) {
+          throw new Error('nenhum provider de CEP registrado em CEP_PROVIDERS');
+        }
+        return providers;
+      },
       inject: [ViaCepProvider],
     },
     CepService,

@@ -27,11 +27,11 @@ describe('GET /cep/:cep (e2e)', () => {
   });
 
   function mockViaCep(body: unknown, status = 200): void {
-    global.fetch = jest.fn().mockResolvedValue({
+    jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: status >= 200 && status < 300,
       status,
       json: async () => await Promise.resolve(body),
-    });
+    } as Response);
   }
 
   it('returns the unified contract when the cep exists', async () => {
@@ -65,28 +65,31 @@ describe('GET /cep/:cep (e2e)', () => {
   });
 
   it('returns 400 for a malformed cep without hitting the network', async () => {
-    const fetchMock = jest.fn();
-    global.fetch = fetchMock;
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockRejectedValue(
+        new Error('the dto should have rejected this before any request'),
+      );
 
     await request(app.getHttpServer()).get('/cep/123').expect(400);
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('returns 503 when the provider times out, not 500, because the outage is theirs', async () => {
     const timeout = new Error('The operation was aborted due to timeout');
     timeout.name = 'TimeoutError';
-    global.fetch = jest.fn().mockRejectedValue(timeout);
+    jest.spyOn(global, 'fetch').mockRejectedValue(timeout);
 
     await request(app.getHttpServer()).get('/cep/01310100').expect(503);
   });
 
   it('returns 503 when the provider answers 5xx', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
+    jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: false,
       status: 503,
       json: async () => await Promise.reject(new Error('should not be called')),
-    });
+    } as unknown as Response);
 
     await request(app.getHttpServer()).get('/cep/01310100').expect(503);
   });
@@ -96,7 +99,7 @@ describe('GET /cep/:cep (e2e)', () => {
     (unreachable as Error & { cause: { code: string } }).cause = {
       code: 'ENOTFOUND',
     };
-    global.fetch = jest.fn().mockRejectedValue(unreachable);
+    jest.spyOn(global, 'fetch').mockRejectedValue(unreachable);
 
     await request(app.getHttpServer()).get('/cep/01310100').expect(503);
   });
