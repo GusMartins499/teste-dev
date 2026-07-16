@@ -1,18 +1,46 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { CepResponse } from './address';
-import { CEP_PROVIDERS, type CepProvider } from './cep-provider';
+import {
+  CEP_PROVIDERS,
+  type CepProvider,
+  type CepResponse,
+} from './providers/cep-provider.interface';
+import {
+  AllProvidersDownError,
+  CepNotFoundError,
+  ProviderFailureError,
+  type ProviderAttempt,
+} from './errors';
+import { RoundRobin } from './round-robin';
 
 @Injectable()
 export class CepService {
+  private readonly rotation: RoundRobin<CepProvider>;
+
   constructor(
     @Inject(CEP_PROVIDERS) private readonly providers: CepProvider[],
-  ) {}
+  ) {
+    this.rotation = new RoundRobin(providers);
+  }
 
   async lookup(cep: string): Promise<CepResponse> {
-    const [provider] = this.providers;
+    const attempts: ProviderAttempt[] = [];
 
-    const address = await provider.lookup(cep);
+    for (const provider of this.rotation.next()) {
+      try {
+        const address = await provider.lookup(cep);
+        return { ...address, meta: { source: provider.name } };
+      } catch (error) {
+        if (error instanceof CepNotFoundError) {
+          throw error;
+        }
+        if (error instanceof ProviderFailureError) {
+          attempts.push({ provider: provider.name, outcome: error.outcome });
+          continue;
+        }
+        throw error;
+      }
+    }
 
-    return { ...address, meta: { source: provider.name } };
+    throw new AllProvidersDownError(attempts);
   }
 }

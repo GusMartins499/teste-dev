@@ -12,3 +12,10 @@ export interface CepResponse extends Address {
     source: string;
   };
 }
+
+export const CEP_PROVIDERS = Symbol('CEP_PROVIDERS');
+
+export interface CepProvider {
+  readonly name: string;
+  lookup(cep: string): Promise<Address>;
+}

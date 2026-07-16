@@ -58,6 +58,39 @@ describe('GET /cep/:cep (e2e)', () => {
       });
   });
 
+  it('falls back to the second provider when the first one fails', async () => {
+    const timeout = new Error('The operation was aborted due to timeout');
+    timeout.name = 'TimeoutError';
+    jest
+      .spyOn(global, 'fetch')
+      .mockRejectedValueOnce(timeout)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () =>
+          await Promise.resolve({
+            cep: '01310100',
+            state: 'SP',
+            city: 'São Paulo',
+            neighborhood: 'Bela Vista',
+            street: 'Avenida Paulista',
+          }),
+      } as unknown as Response);
+
+    await request(app.getHttpServer())
+      .get('/cep/01310100')
+      .expect(200)
+      .expect({
+        cep: '01310100',
+        logradouro: 'Avenida Paulista',
+        complemento: null,
+        bairro: 'Bela Vista',
+        cidade: 'São Paulo',
+        uf: 'SP',
+        meta: { source: 'brasilapi' },
+      });
+  });
+
   it('returns 404 when the cep does not exist, even though ViaCEP answers 200', async () => {
     mockViaCep({ erro: 'true' });
 
