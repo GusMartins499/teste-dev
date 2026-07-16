@@ -38,3 +38,15 @@ export class ProviderUnavailableError extends ProviderFailureError {
     super(provider, 'unavailable', `${provider} indisponível (${detail})`);
   }
 }
+
+export interface ProviderAttempt {
+  provider: string;
+  outcome: ProviderOutcome;
+}
+
+export class AllProvidersDownError extends Error {
+  constructor(readonly attempts: readonly ProviderAttempt[]) {
+    super('todos os providers de CEP falharam');
+    this.name = new.target.name;
+  }
+}

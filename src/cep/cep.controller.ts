@@ -1,5 +1,5 @@
 import { Controller, Get, Param } from '@nestjs/common';
-import type { CepResponse } from './address';
+import type { CepResponse } from './providers/cep-provider.interface';
 import { CepService } from './cep.service';
 import { LookupCepParams } from './lookup-cep.dto';
 

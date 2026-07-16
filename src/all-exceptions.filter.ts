@@ -7,7 +7,11 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { CepNotFoundError, ProviderFailureError } from './cep/errors';
+import {
+  AllProvidersDownError,
+  CepNotFoundError,
+  ProviderFailureError,
+} from './cep/errors';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -21,6 +25,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
         statusCode: HttpStatus.NOT_FOUND,
         error: 'Not Found',
         message: exception.message,
+      });
+      return;
+    }
+
+    if (exception instanceof AllProvidersDownError) {
+      this.logger.warn({
+        attempts: exception.attempts,
+        message: exception.message,
+      });
+      response.status(HttpStatus.SERVICE_UNAVAILABLE).json({
+        statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+        error: 'Service Unavailable',
+        message: 'nenhum provider de CEP conseguiu responder',
       });
       return;
     }
